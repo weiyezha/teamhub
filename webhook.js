@@ -4,23 +4,26 @@ const crypto = require('crypto');
 const fs = require('fs');
 const nodemailer = require('nodemailer');
 
-// 邮件配置（请根据您的SMTP服务配置）
+// 邮件配置（根据部署规范硬编码）
 const EMAIL_CONFIG = {
-    host: 'smtp.qq.com', // QQ邮箱SMTP服务器
-    port: 587,  // TLS加密端口
-    secure: false, // true for 465, false for other ports
+    host: 'smtp.qq.com',
+    port: 587,
+    secure: false,
     auth: {
         user: '1226775702@qq.com',
         pass: 'ycdhemhrepthjjgg'
     }
 };
 
-// 邮件内容配置
 const EMAIL_SETTINGS = {
     from: 'TeamHub部署通知 <1226775702@qq.com>',
-    to: '1226775702@qq.com', // 接收通知的邮箱地址
+    to: '1226775702@qq.com',
     subjectPrefix: '[TeamHub] '
 };
+
+// Webhook配置（兼容环境变量 + 硬编码fallback）
+const PORT = process.env.WEBHOOK_PORT || 9000;
+const SECRET = process.env.WEBHOOK_SECRET || 'teamhub-webhook-secret-2024';
 
 // 发送邮件函数
 function sendEmail(subject, message, isSuccess = true) {
@@ -59,10 +62,6 @@ function sendEmail(subject, message, isSuccess = true) {
     });
 }
 
-// Webhook配置
-const PORT = 9000;
-const SECRET = 'teamhub-webhook-secret-2024';
-
 // GitHub IP白名单（GitHub Webhook IP范围）
 const GITHUB_IPS = [
     '192.30.252.0/22',
@@ -97,8 +96,8 @@ function verifySignature(payload, signature) {
 
 // 创建备份目录
 function createBackup() {
-    const backupDir = `/opt/teamhub/backups/$(date +%Y%m%d_%H%M%S)`;
-    exec(`mkdir -p ${backupDir} && cp -r /opt/teamhub/frontend/dist ${backupDir}/`, (error) => {
+    const backupDir = `/opt/teamhub_backup_20260512_112252/backups/$(date +%Y%m%d_%H%M%S)`;
+    exec(`mkdir -p ${backupDir} && cp -r /opt/teamhub_backup_20260512_112252/frontend/dist ${backupDir}/`, (error) => {
         if (error) {
             console.error('❌ 备份创建失败:', error);
         } else {
@@ -109,7 +108,7 @@ function createBackup() {
 
 // 清理旧备份（保留最近5个）
 function cleanupOldBackups() {
-    exec('ls -dt /opt/teamhub/backups/* | tail -n +6 | xargs rm -rf', (error) => {
+    exec('ls -dt /opt/teamhub_backup_20260512_112252/backups/* | tail -n +6 | xargs rm -rf', (error) => {
         if (!error) {
             console.log('🧹 旧备份清理完成');
         }
@@ -152,8 +151,8 @@ const server = http.createServer((req, res) => {
                 // 3. 创建备份
                 createBackup();
                 
-                // 4. 执行部署脚本（带超时和错误处理）
-                const deployProcess = exec('cd /opt/teamhub/frontend && ./deploy.sh', 
+                // 4. 执行部署（调试版：输出 git 状态以定位根因）
+                const deployProcess = exec('cd /opt/teamhub_backup_20260512_112252 && git fetch origin main && git reset --hard origin/main && cd frontend && ./deploy.sh', 
                     { timeout: 300000 }, // 5分钟超时
                     (error, stdout, stderr) => {
                         if (error) {

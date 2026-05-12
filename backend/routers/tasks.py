@@ -3,14 +3,14 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from auth import get_current_user
+from auth import get_current_user, require_permission
 from database import Announcement, User, UserTask, get_db
 from schemas import UserTaskOut
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_permission("tasks", "view"))])
 def list_user_tasks(status: str = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     q = db.query(UserTask).filter(UserTask.user_id == current_user.id)
     if status:
@@ -20,7 +20,7 @@ def list_user_tasks(status: str = None, db: Session = Depends(get_db), current_u
     return [UserTaskOut.model_validate(t) for t in tasks]
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_permission("tasks", "view"))])
 def create_user_task(req: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     title = req.get("title", "").strip()
     if not title:
@@ -65,7 +65,7 @@ def create_user_task(req: dict = Body(...), db: Session = Depends(get_db), curre
     return UserTaskOut.model_validate(task)
 
 
-@router.put("/{task_id}")
+@router.put("/{task_id}", dependencies=[Depends(require_permission("tasks", "view"))])
 def update_user_task(task_id: int, req: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = db.query(UserTask).filter(UserTask.id == task_id, UserTask.user_id == current_user.id).first()
     if not task:
@@ -88,7 +88,7 @@ def update_user_task(task_id: int, req: dict = Body(...), db: Session = Depends(
     return UserTaskOut.model_validate(task)
 
 
-@router.delete("/{task_id}")
+@router.delete("/{task_id}", dependencies=[Depends(require_permission("tasks", "view"))])
 def delete_user_task(task_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = db.query(UserTask).filter(UserTask.id == task_id, UserTask.user_id == current_user.id).first()
     if not task:

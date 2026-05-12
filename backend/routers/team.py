@@ -38,7 +38,12 @@ def update_current_user(req: dict = Body(...), db: Session = Depends(get_db), cu
     except Exception:
         db.rollback()
         raise
-    return UserOut.model_validate(current_user)
+    db.refresh(current_user)
+    from permissions import get_allowed_modules
+    return {
+        "user": UserOut.model_validate(current_user),
+        "allowed_modules": get_allowed_modules(db, current_user),
+    }
 
 
 @router.put("/api/users/me/password")

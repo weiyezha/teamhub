@@ -261,9 +261,9 @@ def get_setting(db: Session, key: str, default=None):
         "pin_limit": 3,
         "level_colors": {"urgent": "#D93025", "important": "#E37300", "normal": "#1A73E8"},
         "permission_matrix": {
-            "admin": ["announcements.*", "documents.*", "dashboard.*"],
-            "manager": ["announcements.*", "documents.view", "documents.create_edit", "dashboard.view"],
-            "member": ["announcements.view", "documents.view"],
+            "admin": ["announcements.*", "documents.*", "dashboard.*", "tasks.*", "team.*", "settings.*"],
+            "manager": ["announcements.*", "documents.view", "documents.create_edit", "dashboard.view", "tasks.*", "team.*", "settings.*"],
+            "member": ["announcements.view", "documents.view", "dashboard.view", "tasks.view", "team.view", "settings.view"],
             "guest": ["announcements.view"],
         },
     }

@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 
-from auth import get_current_user
+from auth import get_current_user, require_permission
 from database import User, get_db
 
 router = APIRouter(tags=["upload"])
@@ -155,7 +155,7 @@ def upload_file(
     return {"url": f"/api/downloads/{safe_filename}", "filename": original_filename}
 
 
-@router.post("/api/fetch-title")
+@router.post("/api/fetch-title", dependencies=[Depends(require_permission("documents", "view"))])
 def fetch_link_title(
     req: dict = Body(...),
     current_user: User = Depends(get_current_user),

@@ -1,0 +1,2 @@
+export { useAuthCtx as useAuth } from '../contexts/AuthContext';
+export type { User } from '../contexts/AuthContext';
