@@ -1,0 +1,48 @@
+nohup: ignoring input
+🚀 优化版Webhook服务启动成功，监听端口: 9000
+🌐 Webhook地址: http://62.234.66.82:9000/webhook
+🔒 安全特性：IP白名单 + 签名验证
+💾 备份策略：自动备份 + 清理旧备份
+⏰ 超时设置：5分钟
+📥 收到GitHub推送事件: your-org/teamhub -> refs/heads/main
+✅ 备份创建成功: /opt/teamhub/backups/$(date +%Y%m%d_%H%M%S)
+📊 部署进程退出码: 0
+✅ 自动部署完成: 🚀 开始自动部署 TeamHub 前端项目...
+📥 拉取最新代码...
+Already up to date.
+✅ 代码拉取成功
+📦 安装项目依赖...
+
+up to date, audited 348 packages in 974ms
+
+101 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+✅ 依赖安装成功
+🔨 构建生产环境文件...
+
+> frontend@0.0.0 build
+> tsc -b && vite build
+
+vite v8.0.12 building client environment for production...
+[2Ktransforming...✓ 1879 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:   0.33 kB
+dist/assets/index-AxihDKNF.css   57.83 kB │ gzip:  10.57 kB
+dist/assets/index-BizZAlwx.js   902.73 kB │ gzip: 273.21 kB
+
+✓ built in 1.84s
+✅ 项目构建成功
+📁 构建文件检查：
+   - dist目录存在：✅
+   - index.html存在：✅
+   - 文件数量：6 个文件
+🎉 自动部署完成！
+🌐 服务地址：http://62.234.66.82:8080
+⏰ 部署时间：Tue May 12 10:17:06 AM CST 2026
+
+🧹 旧备份清理完成
+📧 邮件发送成功: <fe0850cb-2294-290f-e6e5-88a4080a56fb@qq.com>
+🚫 非法IP访问: ::ffff:143.20.185.242

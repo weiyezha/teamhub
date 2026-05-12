@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  backend:
+    build: ./backend
+    container_name: teamhub-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=sqlite:///./teamhub.db
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/uploads:/app/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  nginx:
+    image: nginx:alpine
+    container_name: teamhub-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./backend/uploads:/app/uploads:ro
+    depends_on:
+      - backend
