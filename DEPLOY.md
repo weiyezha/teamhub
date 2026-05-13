@@ -93,7 +93,62 @@ chmod +x deploy/deploy-remote.sh
 
 ---
 
-## 第五步：配置自动备份
+## 第五步：配置 Webhook 自动部署（推荐）
+
+实现 **VS Code 修改 → `git push` → 自动部署** 的工作流。
+
+### 5.1 服务器端配置 Webhook 服务
+
+```bash
+cd /opt/teamhub
+
+# 1. 确保 Node.js 已安装
+node -v  # 需要 v18+
+
+# 2. 编辑 systemd 服务配置
+sudo nano /etc/systemd/system/webhook.service
+```
+
+修改 `WEBHOOK_SECRET` 和邮件配置，然后：
+
+```bash
+# 3. 启动服务
+sudo systemctl daemon-reload
+sudo systemctl start webhook
+sudo systemctl enable webhook
+
+# 4. 查看状态
+sudo systemctl status webhook
+sudo journalctl -u webhook -f
+```
+
+### 5.2 GitHub 配置 Webhook
+
+1. 打开仓库 → **Settings** → **Webhooks** → **Add webhook**
+2. 填写：
+   - **Payload URL**: `http://<服务器IP>:9000/webhook`
+   - **Content type**: `application/json`
+   - **Secret**: 与服务器 `WEBHOOK_SECRET` 一致
+   - **Events**: 勾选 **Just the push event**
+3. 点击 **Add webhook**
+
+### 5.3 使用流程
+
+```bash
+# 本地开发
+git add .
+git commit -m "feat: xxx"
+git push origin main
+
+# 等待 1-2 分钟，自动部署完成
+# 刷新 http://<服务器IP> 查看效果
+```
+
+详细配置见 [WEBHOOK_SETUP.md](./WEBHOOK_SETUP.md)。
+
+---
+
+## 第六步：配置自动备份
 
 ```bash
 # 添加定时任务（每天凌晨3点备份）
@@ -104,23 +159,23 @@ crontab -e
 
 ---
 
-## 第六步：（可选）配置域名 + HTTPS
+## 第七步：（可选）配置域名 + HTTPS
 
-### 6.1 购买/配置域名，A 记录指向服务器 IP
+### 7.1 购买/配置域名，A 记录指向服务器 IP
 
-### 6.2 安装 Certbot
+### 7.2 安装 Certbot
 
 ```bash
 sudo apt-get install certbot python3-certbot-nginx
 ```
 
-### 6.3 申请 SSL 证书
+### 7.3 申请 SSL 证书
 
 ```bash
 sudo certbot --nginx -d your-domain.com
 ```
 
-### 6.4 更新 CORS
+### 7.4 更新 CORS
 
 ```bash
 cd /opt/teamhub/backend

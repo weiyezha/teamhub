@@ -1,0 +1,32 @@
+[Unit]
+Description=TeamHub GitHub Webhook Auto Deploy Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/teamhub
+
+# 环境变量
+Environment="NODE_ENV=production"
+Environment="WEBHOOK_PORT=9000"
+Environment="WEBHOOK_SECRET=teamhub-webhook-secret-2024"
+Environment="PROJECT_DIR=/opt/teamhub"
+Environment="BACKUP_DIR=/opt/backups"
+
+# 邮件通知配置（可选）
+# Environment="SMTP_HOST=smtp.qq.com"
+# Environment="SMTP_PORT=587"
+# Environment="SMTP_USER=your-email@qq.com"
+# Environment="SMTP_PASS=your-smtp-password"
+# Environment="NOTIFY_EMAIL=your-email@qq.com"
+
+ExecStart=/usr/bin/node /opt/teamhub/webhook.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
