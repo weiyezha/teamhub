@@ -7,14 +7,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth import get_current_user, require_permission
 from database import (
-    ActivityLog, Announcement, User, UserTask, get_db, utc_now,
+    ActivityLog, Announcement, User, UserTask, get_db, get_setting, utc_now,
 )
 from schemas import AnnouncementOut
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
-
-CATEGORIES = ["打款", "推广", "合同", "发行", "维权", "审批", "产品"]
-
 
 def _visibility_filter(q, current_user: User):
     """Filter out manager_only announcements for non-admin/manager users."""
@@ -28,8 +25,9 @@ def dashboard_stats(db: Session = Depends(get_db), current_user: User = Depends(
     week_ago = utc_now() - timedelta(days=7)
     active_users = db.query(User).filter(User.last_seen_at >= week_ago).count()
     total_users = db.query(User).filter(User.is_active == True).count()
+    categories = get_setting(db, "announcement_categories", ["打款", "推广", "合同", "发行", "维权", "审批", "产品"])
     category_counts = {}
-    for cat in CATEGORIES:
+    for cat in categories:
         q = db.query(Announcement).filter(Announcement.category == cat, Announcement.status == "active")
         q = _visibility_filter(q, current_user)
         category_counts[cat] = q.count()

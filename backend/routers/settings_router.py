@@ -31,6 +31,7 @@ def get_settings(db: Session = Depends(get_db), current_user: User = Depends(get
         },
         "app_name": "TeamHub",
         "app_subtitle": "Studio",
+        "watermark_opacity": 0.08,
     }
     for key, default in known_defaults.items():
         if key not in result:

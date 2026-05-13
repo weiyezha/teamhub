@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { useTheme } from './hooks/useTheme';
@@ -37,9 +37,8 @@ function LoadingScreen() {
   );
 }
 
-function Watermark({ name }: { name: string }) {
+function Watermark({ name, opacity = 0.08 }: { name: string; opacity?: number }) {
   if (!name) return null;
-  // Generate a dense grid of watermarks for screenshot traceability
   const items = Array.from({ length: 60 }, (_, i) => i);
   return (
     <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden" aria-hidden="true">
@@ -50,9 +49,9 @@ function Watermark({ name }: { name: string }) {
           style={{
             left: `${(i % 10) * 12 + 2}%`,
             top: `${Math.floor(i / 10) * 18 + 5}%`,
-            color: 'rgba(128, 128, 128, 0.15)',
+            color: `rgba(128, 128, 128, ${opacity})`,
             transform: `rotate(-25deg)`,
-            textShadow: '0 0 1px rgba(128,128,128,0.1)',
+            textShadow: `0 0 1px rgba(128,128,128,${opacity * 0.5})`,
           }}
         >
           {name}
@@ -66,13 +65,24 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { theme, toggle } = useTheme();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.08);
+
+  useEffect(() => {
+    import('./api').then(({ api }) => {
+      api.get('/api/settings').then((res: any) => {
+        if (res.data && typeof res.data.watermark_opacity === 'number') {
+          setWatermarkOpacity(res.data.watermark_opacity);
+        }
+      }).catch(() => {});
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex relative">
       <AmbientGlowCSS />
       <div className="noise-overlay absolute inset-0 pointer-events-none z-[2]" />
       <WelcomeModal />
-      <Watermark name={user?.name || ''} />
+      <Watermark name={user?.name || ''} opacity={watermarkOpacity} />
       <div className="hidden md:block relative z-10">
         <Sidebar user={user} />
       </div>

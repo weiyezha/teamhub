@@ -17,6 +17,9 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
+  Plus,
+  Trash2,
+  Tag,
 } from 'lucide-react';
 import api from '../lib/api';
 import { showToast } from '../hooks/useToast';
@@ -24,6 +27,94 @@ import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { UserTable } from '../components/UserTable';
 import { PermissionMatrix } from '../components/PermissionMatrix';
+
+function CategoryManager() {
+  const [categories, setCategories] = useState<string[]>(['打款', '推广', '合同', '发行', '维权', '审批', '产品']);
+  const [newCategory, setNewCategory] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/api/categories')
+      .then((res: any) => {
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setCategories(res.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const saveCategories = async (next: string[]) => {
+    try {
+      await api.put('/api/settings', { announcement_categories: next });
+      setCategories(next);
+      showToast('分类已保存', 'success');
+    } catch {
+      showToast('保存失败', 'error');
+    }
+  };
+
+  const addCategory = () => {
+    const name = newCategory.trim();
+    if (!name) return;
+    if (categories.includes(name)) {
+      showToast('该分类已存在', 'error');
+      return;
+    }
+    saveCategories([...categories, name]);
+    setNewCategory('');
+  };
+
+  const removeCategory = (name: string) => {
+    const next = categories.filter((c) => c !== name);
+    saveCategories(next);
+  };
+
+  if (loading) return <p className="text-xs text-text-tertiary">加载中...</p>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {categories.map((cat) => (
+          <span
+            key={cat}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-tag text-xs bg-bg-secondary text-text-primary border border-border"
+          >
+            <Tag size={10} />
+            {cat}
+            <button
+              onClick={() => removeCategory(cat)}
+              className="ml-0.5 text-text-tertiary hover:text-danger transition-colors"
+              title="删除"
+            >
+              <Trash2 size={10} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={newCategory}
+          onChange={(e) => setNewCategory(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') addCategory(); }}
+          placeholder="输入新分类名称..."
+          className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-btn text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+        />
+        <button
+          onClick={addCategory}
+          disabled={!newCategory.trim()}
+          className="px-3 py-2 bg-accent text-white rounded-btn text-sm hover:bg-accent/90 transition-colors disabled:opacity-40 flex items-center gap-1"
+        >
+          <Plus size={14} /> 添加
+        </button>
+      </div>
+      <p className="text-[10px] text-text-tertiary">
+        提示：修改分类后，已有公告的分类标签不会自动变更。删除分类后，该分类的公告仍保留原分类标签。
+      </p>
+    </div>
+  );
+}
 
 interface AdminStats {
   total_users: number;
@@ -61,6 +152,7 @@ interface SystemSettings {
   allow_guest_access: boolean;
   app_name: string;
   app_subtitle: string;
+  watermark_opacity: number;
 }
 
 const actionLabels: Record<string, string> = {
@@ -107,7 +199,7 @@ export function Admin() {
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
   const [settings, setSettings] = useState<SystemSettings>({
     open_registration: true, require_approval: false, allow_guest_access: false,
-    app_name: 'TeamHub', app_subtitle: 'Studio',
+    app_name: 'TeamHub', app_subtitle: 'Studio', watermark_opacity: 0.08,
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const { requestConfirm: confirm, cancel, state: confirmState } = useConfirm();
@@ -172,6 +264,7 @@ export function Admin() {
           allow_guest_access: res.data.allow_guest_access ?? false,
           app_name: res.data.app_name || 'TeamHub',
           app_subtitle: res.data.app_subtitle || 'Studio',
+          watermark_opacity: res.data.watermark_opacity ?? 0.08,
         });
         if (res.data.level_colors) {
           const lc = res.data.level_colors;
@@ -223,6 +316,24 @@ export function Admin() {
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       const msg = Array.isArray(detail) ? detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ') : (typeof detail === 'string' ? detail : '删除失败');
+      showToast(msg, 'error');
+    }
+  };
+
+  const batchUpdateUsers = async (userIds: number[], updates: Partial<AdminUser>) => {
+    const actionText = updates.is_active ? '启用' : '禁用';
+    const ok = await confirm(`批量${actionText}用户`, `确定要${actionText}选中的 ${userIds.length} 位用户吗？`, updates.is_active ? 'success' : 'warning');
+    if (!ok) return;
+    try {
+      await api.post('/api/admin/users/batch-update', { user_ids: userIds, updates });
+      setUsers((prev) =>
+        prev.map((u) => (userIds.includes(u.id) ? { ...u, ...updates } : u))
+      );
+      fetchStats();
+      showToast(`已${actionText} ${userIds.length} 位用户`, 'success');
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      const msg = Array.isArray(detail) ? detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ') : (typeof detail === 'string' ? detail : '批量操作失败');
       showToast(msg, 'error');
     }
   };
@@ -406,6 +517,7 @@ export function Admin() {
               onToggleActive={toggleUserActive}
               onDelete={deleteUser}
               onSave={saveUser}
+              onBatchUpdate={batchUpdateUsers}
             />
           )}
         </div>
@@ -654,6 +766,11 @@ export function Admin() {
             </div>
           </div>
           <div className="card p-5">
+            <h3 className="text-sm font-semibold text-text-primary mb-4">公告分类管理</h3>
+            <CategoryManager />
+          </div>
+
+          <div className="card p-5">
             <h3 className="text-sm font-semibold text-text-primary mb-4">应用信息</h3>
             <div className="space-y-3">
               <div>
@@ -669,6 +786,55 @@ export function Admin() {
                   setSettings(s => ({ ...s, app_subtitle: e.target.value }));
                   debouncedSave('app_subtitle', e.target.value);
                 }} className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-btn text-sm text-text-primary outline-none focus:border-accent mt-1" />
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-text-primary mb-4">水印设置</h3>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-text-secondary">水印透明度</label>
+                  <span className="text-xs text-text-primary font-mono">{Math.round(settings.watermark_opacity * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.02"
+                  max="0.30"
+                  step="0.01"
+                  value={settings.watermark_opacity}
+                  onChange={e => {
+                    const val = parseFloat(e.target.value);
+                    setSettings(s => ({ ...s, watermark_opacity: val }));
+                    debouncedSave('watermark_opacity', val);
+                  }}
+                  className="w-full accent-champagne cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-text-tertiary mt-1">
+                  <span>很淡</span>
+                  <span>适中</span>
+                  <span>明显</span>
+                </div>
+                <div className="mt-3 p-3 bg-bg-secondary rounded-btn">
+                  <p className="text-xs text-text-secondary mb-2">预览效果</p>
+                  <div className="relative h-16 bg-bg-primary rounded overflow-hidden">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className="absolute text-sm font-bold select-none whitespace-nowrap"
+                        style={{
+                          left: `${(i % 3) * 30 + 5}%`,
+                          top: `${Math.floor(i / 3) * 50 + 10}%`,
+                          color: `rgba(128, 128, 128, ${settings.watermark_opacity})`,
+                          transform: `rotate(-25deg)`,
+                        }}
+                      >
+                        用户名
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

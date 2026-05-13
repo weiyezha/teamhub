@@ -11,24 +11,15 @@ import { showToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAuth } from '../hooks/useAuth';
+import { useCategories, getCategoryColor } from '../hooks/useCategories';
 
 
 
-const categories = ['全部', '打款', '推广', '合同', '发行', '维权', '审批', '产品'];
+
 const statusTabs = [
   { key: 'active', label: '进行中' },
   { key: 'archived', label: '已归档' },
 ];
-
-const categoryColors: Record<string, string> = {
-  '打款': 'bg-emerald-600 text-white',
-  '推广': 'bg-blue-600 text-white',
-  '合同': 'bg-violet-600 text-white',
-  '发行': 'bg-amber-600 text-white',
-  '维权': 'bg-rose-600 text-white',
-  '审批': 'bg-orange-600 text-white',
-  '产品': 'bg-cyan-600 text-white',
-};
 
 const levelConfig: Record<string, { bar: string; badge: string; label: string; icon: string }> = {
   urgent:   { bar: 'bg-red-500',   badge: 'bg-red-500 text-white',   label: '紧急', icon: '🔥' },
@@ -48,6 +39,8 @@ export function Announcements() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchAction, setBatchAction] = useState<string | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { categories: apiCategories } = useCategories();
+  const categories = ['全部', ...apiCategories];
 
   const activeCategory = searchParams.get('category') || '全部';
   const activeStatus = searchParams.get('status') || 'active';
@@ -332,7 +325,7 @@ export function Announcements() {
                     onChange={() => toggleSelection(a.id)}
                     className="absolute top-2 left-2 rounded border-border w-3.5 h-3.5 shrink-0 bg-white/80 backdrop-blur"
                   />
-                  <span className={`absolute top-2 left-7 text-[10px] px-1.5 py-0.5 rounded-tag font-medium ${categoryColors[a.category] || 'bg-gray-600 text-white'}`}>
+                  <span className={`absolute top-2 left-7 text-[10px] px-1.5 py-0.5 rounded-tag font-medium ${getCategoryColor(a.category)}`}>
                     {a.category}
                   </span>
                   {a.is_pinned && (

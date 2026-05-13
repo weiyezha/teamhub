@@ -21,6 +21,33 @@ def admin_users(page: int = 1, limit: int = 50, db: Session = Depends(get_db), c
     return {"total": total, "page": page, "limit": limit, "items": [UserOut.model_validate(u) for u in users]}
 
 
+@router.post("/users/batch-update")
+def batch_update_users(req: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    """Batch update users (activate/deactivate/change role)."""
+    user_ids = req.get("user_ids", [])
+    updates = req.get("updates", {})
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="user_ids is required")
+    allowed = {"is_active", "role"}
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed}
+    if not filtered_updates:
+        raise HTTPException(status_code=400, detail="No valid updates provided")
+    updated_count = 0
+    for user_id in user_ids:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user and user.id != current_user.id:
+            for key, value in filtered_updates.items():
+                setattr(user, key, value)
+            updated_count += 1
+    db.add(ActivityLog(
+        user_id=current_user.id, action="batch_update_users",
+        target_type="user", target_id=0,
+        meta_data={"count": updated_count, "updates": filtered_updates, "user_ids": user_ids},
+    ))
+    db.commit()
+    return {"success": True, "updated_count": updated_count}
+
+
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     user = db.query(User).filter(User.id == user_id).first()

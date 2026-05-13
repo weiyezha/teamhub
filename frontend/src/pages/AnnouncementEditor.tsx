@@ -16,8 +16,7 @@ import api from '../lib/api';
 import { showToast } from '../hooks/useToast';
 import { TipTapEditor } from '../components/TipTapEditor';
 import { useAuth } from '../hooks/useAuth';
-
-const categories = ['打款', '推广', '合同', '发行', '维权', '审批', '产品'];
+import { useCategories } from '../hooks/useCategories';
 
 interface Attachment {
   url: string;
@@ -28,6 +27,7 @@ interface Attachment {
 export function AnnouncementEditor() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { categories } = useCategories();
   const isEdit = Boolean(id);
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -82,12 +82,13 @@ def health_check():
 
 
 # Categories endpoint
-CATEGORIES = ["打款", "推广", "合同", "发行", "维权", "审批", "产品"]
+from database import get_setting
 
 
 @app.get("/api/categories")
-def get_categories():
-    return CATEGORIES
+def get_categories(db = Depends(get_db)):
+    cats = get_setting(db, "announcement_categories", ["打款", "推广", "合同", "发行", "维权", "审批", "产品"])
+    return cats
 
 
 # Seed endpoint (idempotent) — disabled by default in production

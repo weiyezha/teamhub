@@ -259,6 +259,7 @@ def get_setting(db: Session, key: str, default=None):
         "app_name": "TeamHub",
         "app_subtitle": "Studio",
         "pin_limit": 3,
+        "watermark_opacity": 0.08,
         "level_colors": {"urgent": "#D93025", "important": "#E37300", "normal": "#1A73E8"},
         "permission_matrix": {
             "admin": ["announcements.*", "documents.*", "dashboard.*", "tasks.*", "team.*", "settings.*"],

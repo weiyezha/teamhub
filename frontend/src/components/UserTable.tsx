@@ -19,6 +19,8 @@ import {
   ArrowUp,
   ArrowDown,
   Search,
+  Users,
+  UsersRound,
 } from 'lucide-react';
 
 interface AdminUser {
@@ -28,6 +30,7 @@ interface AdminUser {
   role: string;
   department: string;
   title: string;
+  phone: string;
   is_active: boolean;
   last_seen_at: string;
   created_at: string;
@@ -47,15 +50,61 @@ interface UserTableProps {
   onToggleActive: (user: AdminUser) => void;
   onDelete: (user: AdminUser) => void;
   onSave: (userId: number, form: Partial<AdminUser>) => void;
+  onBatchUpdate?: (userIds: number[], updates: Partial<AdminUser>) => void;
 }
 
-export function UserTable({ users, onToggleActive, onDelete, onSave }: UserTableProps) {
+function formatDate(dateStr: string) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+export function UserTable({ users, onToggleActive, onDelete, onSave, onBatchUpdate }: UserTableProps) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<AdminUser>>({});
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const allSelected = users.length > 0 && users.every(u => selectedIds.has(u.id));
+  const someSelected = users.some(u => selectedIds.has(u.id)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(users.map(u => u.id)));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
 
   const columns = [
+    columnHelper.display({
+      id: 'select',
+      header: () => (
+        <input
+          type="checkbox"
+          checked={allSelected}
+          ref={(el) => { if (el) el.indeterminate = someSelected; }}
+          onChange={toggleSelectAll}
+          className="w-4 h-4 accent-champagne cursor-pointer"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(row.original.id)}
+          onChange={() => toggleSelect(row.original.id)}
+          className="w-4 h-4 accent-champagne cursor-pointer"
+        />
+      ),
+    }),
     columnHelper.accessor('name', {
       header: '用户',
       cell: ({ row, getValue }) => {
@@ -159,6 +208,18 @@ export function UserTable({ users, onToggleActive, onDelete, onSave }: UserTable
         return <span className="text-text-primary">{getValue() || '-'}</span>;
       },
     }),
+    columnHelper.accessor('phone', {
+      header: '手机号',
+      cell: ({ getValue }) => <span className="text-text-primary">{getValue() || '-'}</span>,
+    }),
+    columnHelper.accessor('created_at', {
+      header: '注册时间',
+      cell: ({ getValue }) => <span className="text-text-secondary text-xs">{formatDate(getValue() as string)}</span>,
+    }),
+    columnHelper.accessor('last_seen_at', {
+      header: '最后登录',
+      cell: ({ getValue }) => <span className="text-text-secondary text-xs">{formatDate(getValue() as string)}</span>,
+    }),
     columnHelper.accessor('is_active', {
       header: '状态',
       cell: ({ getValue }) => {
@@ -170,7 +231,7 @@ export function UserTable({ users, onToggleActive, onDelete, onSave }: UserTable
             }`}
           >
             {active ? <UserCheck size={12} /> : <Ban size={12} />}
-            {active ? '正常' : '禁用'}
+            {active ? '正常' : '待审批'}
           </span>
         );
       },
@@ -259,17 +320,48 @@ export function UserTable({ users, onToggleActive, onDelete, onSave }: UserTable
 
   return (
     <div className="space-y-3">
-      {/* Search */}
-      <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-        <input
-          type="text"
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          placeholder="搜索用户..."
-          aria-label="搜索用户"
-          className="w-full md:w-72 pl-9 pr-3 py-2 bg-bg-secondary border border-border rounded-btn text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
-        />
+      {/* Search + Batch Actions */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+          <input
+            type="text"
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            placeholder="搜索用户..."
+            aria-label="搜索用户"
+            className="w-full md:w-72 pl-9 pr-3 py-2 bg-bg-secondary border border-border rounded-btn text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent"
+          />
+        </div>
+        {selectedIds.size > 0 && onBatchUpdate && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-secondary">已选 {selectedIds.size} 人</span>
+            <button
+              onClick={() => {
+                onBatchUpdate(Array.from(selectedIds), { is_active: true });
+                setSelectedIds(new Set());
+              }}
+              className="px-3 py-1.5 text-xs bg-success/10 text-success rounded-btn hover:bg-success/20 transition-colors flex items-center gap-1"
+            >
+              <Users size={12} /> 批量启用
+            </button>
+            <button
+              onClick={() => {
+                onBatchUpdate(Array.from(selectedIds), { is_active: false });
+                setSelectedIds(new Set());
+              }}
+              className="px-3 py-1.5 text-xs bg-warning/10 text-warning rounded-btn hover:bg-warning/20 transition-colors flex items-center gap-1"
+            >
+              <UsersRound size={12} /> 批量禁用
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-xs bg-bg-secondary text-text-secondary rounded-btn hover:bg-bg-tertiary transition-colors"
+            >
+              取消选择
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto">
