@@ -71,9 +71,15 @@ def _build_announcement_out(a: Announcement, db: Session, current_user_id: int) 
         .filter(Comment.target_id == a.id, Comment.target_type == "announcement")
         .count()
     )
+    is_read = (
+        db.query(AnnouncementRead)
+        .filter(AnnouncementRead.announcement_id == a.id, AnnouncementRead.user_id == current_user_id)
+        .first() is not None
+    )
     out = AnnouncementOut.model_validate(a)
     out.author_name = a.author.name if a.author else ""
     out.read_count = read_count
+    out.is_read = is_read
     out.comment_count = comment_count
     out.reactions = _build_reaction_summary(db, "announcement", a.id, current_user_id)
     return out

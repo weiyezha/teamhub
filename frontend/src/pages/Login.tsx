@@ -27,6 +27,8 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1=verify identity, 2=enter token+new password
+  const [resetToken, setResetToken] = useState('');
   const cardRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,20 +36,30 @@ export function Login() {
     setError(''); setSuccess(''); setLoading(true);
     try {
       if (isForgotPassword) {
-        // Step 1: verify identity and get reset token
-        const fpRes = await api.post('/api/auth/forgot-password', {
-          username: username.trim(),
-          phone: phone.trim(),
-        });
-        const token = fpRes.data.token;
-        // Step 2: reset password with token
-        await api.post('/api/auth/reset-password', {
-          token,
-          new_password: password,
-        });
-        setSuccess('密码重置成功，请使用新密码登录');
-        setIsForgotPassword(false);
-        setUsername(''); setPhone(''); setPassword('');
+        if (forgotStep === 1) {
+          // Step 1: verify identity (backend sends token via SMS, not returned in response)
+          await api.post('/api/auth/forgot-password', {
+            username: username.trim(),
+            phone: phone.trim(),
+          });
+          setSuccess('验证通过，请输入收到的重置令牌和新密码');
+          setForgotStep(2);
+        } else {
+          // Step 2: reset password with manually entered token
+          if (!resetToken.trim()) {
+            setError('请输入重置令牌');
+            setLoading(false);
+            return;
+          }
+          await api.post('/api/auth/reset-password', {
+            token: resetToken.trim(),
+            new_password: password,
+          });
+          setSuccess('密码重置成功，请使用新密码登录');
+          setIsForgotPassword(false);
+          setForgotStep(1);
+          setUsername(''); setPhone(''); setPassword(''); setResetToken('');
+        }
       } else if (isRegister) {
         const res = await api.post('/api/auth/register', { name, password, phone: phone.trim() });
         setSuccess(res.data.message || '注册成功，等待管理员审批');
@@ -137,8 +149,8 @@ export function Login() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name field: shown for register and forgot password */}
-            {(isRegister || isForgotPassword) && (
+            {/* Name field: shown for register and forgot password step 1 */}
+            {(isRegister || (isForgotPassword && forgotStep === 1)) && (
               <div>
                 <label className="block text-[12px] font-medium uppercase tracking-wider mb-2 text-text-tertiary">
                   {isForgotPassword ? '用户名' : '姓名'}
@@ -151,13 +163,13 @@ export function Login() {
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', boxShadow: focusedField === 'name' ? '0 0 0 4px var(--champagne-muted)' : 'none' }}
                   required />
                 {isRegister && (
-                  <p className="text-[11px] text-text-tertiary mt-1.5">名字随意，将作为登录账号和显示名</p>
+                  <p className="text-[11px] text-text-tertiary mt-1.5">请填写真实姓名</p>
                 )}
               </div>
             )}
 
-            {/* Phone field: shown for register and forgot password */}
-            {(isRegister || isForgotPassword) && (
+            {/* Phone field: shown for register and forgot password step 1 */}
+            {(isRegister || (isForgotPassword && forgotStep === 1)) && (
               <div>
                 <label className="block text-[12px] font-medium uppercase tracking-wider mb-2 text-text-tertiary">手机号</label>
                 <input type="tel" value={phone}
@@ -169,6 +181,20 @@ export function Login() {
                 {isRegister && (
                   <p className="text-[11px] text-text-tertiary mt-1.5">手机号用于找回密码，请牢记</p>
                 )}
+              </div>
+            )}
+
+            {/* Reset token field: only for forgot password step 2 */}
+            {isForgotPassword && forgotStep === 2 && (
+              <div>
+                <label className="block text-[12px] font-medium uppercase tracking-wider mb-2 text-text-tertiary">重置令牌</label>
+                <input type="text" value={resetToken}
+                  onChange={e => setResetToken(e.target.value)}
+                  onFocus={() => setFocusedField('token')} onBlur={() => setFocusedField(null)}
+                  placeholder="输入收到的重置令牌" className={inputClass('token')}
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', boxShadow: focusedField === 'token' ? '0 0 0 4px var(--champagne-muted)' : 'none' }}
+                  required />
+                <p className="text-[11px] text-text-tertiary mt-1.5">令牌已通过短信发送，请输入收到的令牌</p>
               </div>
             )}
 
@@ -185,24 +211,27 @@ export function Login() {
               </div>
             )}
 
-            <div>
-              <label className="block text-[12px] font-medium uppercase tracking-wider mb-2 text-text-tertiary">
-                {isForgotPassword ? '新密码' : '密码'}
-              </label>
-              <div className="relative">
-                <input type={showPassword ? 'text' : 'password'} value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
-                  placeholder={isForgotPassword ? '设置新密码（8位+大小写+数字）' : '输入密码'}
-                  className={inputClass('password')}
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', boxShadow: focusedField === 'password' ? '0 0 0 4px var(--champagne-muted)' : 'none' }}
-                  required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors duration-200 text-text-tertiary">
-                  {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
-                </button>
+            {/* Password field: shown for login, register, and forgot password step 2 */}
+            {(!isForgotPassword || forgotStep === 2) && (
+              <div>
+                <label className="block text-[12px] font-medium uppercase tracking-wider mb-2 text-text-tertiary">
+                  {isForgotPassword ? '新密码' : '密码'}
+                </label>
+                <div className="relative">
+                  <input type={showPassword ? 'text' : 'password'} value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
+                    placeholder={isRegister ? '8位以上，包含大小写字母和数字' : isForgotPassword ? '设置新密码（8位+大小写+数字）' : '输入密码'}
+                    className={inputClass('password')}
+                    style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', boxShadow: focusedField === 'password' ? '0 0 0 4px var(--champagne-muted)' : 'none' }}
+                    required />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors duration-200 text-text-tertiary">
+                    {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <button type="submit" disabled={loading}
               className="w-full h-[52px] rounded-xl font-semibold text-[15px] tracking-wide transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-70 hover:brightness-110 hover:-translate-y-px active:translate-y-0 active:scale-[0.985]"
@@ -211,7 +240,7 @@ export function Login() {
                 <div className="w-5 h-5 border-2 rounded-full animate-spin"
                   style={{ borderColor: 'rgba(12,12,16,0.3)', borderTopColor: '#fff' }} />
               ) : (
-                isForgotPassword ? '重置密码' : isRegister ? '创建账号' : '登录'
+                isForgotPassword ? (forgotStep === 1 ? '获取重置令牌' : '重置密码') : isRegister ? '创建账号' : '登录'
               )}
             </button>
           </form>

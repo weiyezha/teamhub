@@ -74,7 +74,8 @@ class Announcement(Base):
     attachments = Column(JSON, default=list)
     images = Column(JSON, default=list)
     level = Column(String, default="normal")  # urgent, important, normal
-    visibility = Column(String, default="public")  # public, manager_only
+    visibility = Column(String, default="public")  # public, manager_only, specified
+    target_user_ids = Column(JSON, default=list)  # for visibility=specified, list of user ids
     expires_at = Column(DateTime, nullable=True)
     summary = Column(String, default="")
     keywords = Column(JSON, default=list)

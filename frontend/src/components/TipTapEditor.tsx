@@ -52,7 +52,7 @@ export function TipTapEditor({ content, onChange, placeholder = '输入内容...
 
   // Sync external content changes into editor (e.g. when loading data in edit mode)
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor && !editor.isDestroyed && content !== editor.getHTML()) {
       editor.commands.setContent(content, { emitUpdate: false });
     }
   }, [editor, content]);
@@ -71,7 +71,8 @@ export function TipTapEditor({ content, onChange, placeholder = '输入内容...
   );
 }
 
-function EditorToolbar({ editor, onImageUpload }: { editor: Editor; onImageUpload?: () => void }) {
+function EditorToolbar({ editor, onImageUpload }: { editor: Editor | null; onImageUpload?: () => void }) {
+  if (!editor || editor.isDestroyed) return null;
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptTitle, setPromptTitle] = useState('');
   const [promptPlaceholder, setPromptPlaceholder] = useState('');

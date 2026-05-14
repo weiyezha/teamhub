@@ -41,6 +41,10 @@ export function AnnouncementEditor() {
   const [expiresAt, setExpiresAt] = useState('');
   const [level, setLevel] = useState('normal');
   const [visibility, setVisibility] = useState('public');
+  const [targetUserIds, setTargetUserIds] = useState<number[]>([]);
+  const [showUserSelector, setShowUserSelector] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [userSearch, setUserSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -61,6 +65,7 @@ export function AnnouncementEditor() {
         setIsPinned(a.is_pinned || false);
         setLevel(a.level || 'normal');
         setVisibility(a.visibility || 'public');
+        setTargetUserIds(Array.isArray(a.target_user_ids) ? a.target_user_ids : []);
         setExpiresAt(a.expires_at ? a.expires_at.slice(0, 10) : '');
         setImages(Array.isArray(a.images) ? a.images.filter((x: any) => typeof x === 'string') : []);
         setAttachments(Array.isArray(a.attachments) ? a.attachments.filter((x: any) => x && typeof x === 'object') : []);
@@ -69,32 +74,58 @@ export function AnnouncementEditor() {
       .finally(() => setLoading(false));
   }, [id, isEdit]);
 
+  useEffect(() => {
+    if (!showUserSelector) return;
+    api.get('/api/team?limit=500')
+      .then((res) => setUsers(res.data.items || []))
+      .catch(() => showToast('加载用户列表失败', 'error'));
+  }, [showUserSelector]);
+
   const handleImageClick = () => {
     fileInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await api.post('/api/upload', formData);
-      const url = res.data.url;
-      if (editorRef.current) {
-        editorRef.current.chain().focus().setImage({ src: url }).run();
+    const uploadedUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: formData,
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        const url = data.url;
+        uploadedUrls.push(url);
+        const ed = editorRef.current;
+        if (ed && !ed.isDestroyed && typeof ed.chain === 'function') {
+          try {
+            ed.chain().focus().setImage({ src: url }).run();
+          } catch (e) {
+            console.warn('Editor insert image failed:', e);
+          }
+        }
+      } catch (err: any) {
+        const msg = err.message || `图片 "${file.name}" 上传失败`;
+        showToast(msg, 'error');
       }
-      setImages((prev) => [...prev, url]);
-    } catch (err: any) {
-      let msg = err.response?.data?.detail || '图片上传失败';
-      if (Array.isArray(msg)) msg = msg.map((d: any) => d.msg || String(d)).join('; ');
-      else if (typeof msg !== 'string') msg = String(msg);
-      showToast(msg, 'error');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+    if (uploadedUrls.length > 0) {
+      setImages((prev) => [...prev, ...uploadedUrls]);
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleAttachmentClick = () => {
@@ -108,16 +139,24 @@ export function AnnouncementEditor() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await api.post('/api/upload', formData);
-      const url = res.data.url;
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const url = data.url;
       setAttachments((prev) => [
         ...prev,
         { url, filename: file.name, type: file.type },
       ]);
     } catch (err: any) {
-      let msg = err.response?.data?.detail || '文件上传失败';
-      if (Array.isArray(msg)) msg = msg.map((d: any) => d.msg || String(d)).join('; ');
-      else if (typeof msg !== 'string') msg = String(msg);
+      const msg = err.message || '文件上传失败';
       showToast(msg, 'error');
     } finally {
       setAttaching(false);
@@ -142,19 +181,19 @@ export function AnnouncementEditor() {
     if (!title.trim() || !content.trim()) return;
     setSubmitting(true);
     try {
+      const payload: any = {
+        title, content, category, level, visibility,
+        is_pinned: isPinned, images, attachments,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+      };
+      if (visibility === 'specified') {
+        payload.target_user_ids = targetUserIds;
+      }
       if (isEdit) {
-        await api.put(`/api/announcements/${id}`, {
-          title, content, category, level, visibility,
-          is_pinned: isPinned, images, attachments,
-          expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-        });
+        await api.put(`/api/announcements/${id}`, payload);
         navigate(`/announcements/${id}`);
       } else {
-        const res = await api.post('/api/announcements', {
-          title, content, category, level, visibility,
-          is_pinned: isPinned, images, attachments,
-          expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-        });
+        const res = await api.post('/api/announcements', payload);
         navigate(`/announcements/${res.data.id}`);
       }
     } catch (err: any) {
@@ -245,10 +284,11 @@ export function AnnouncementEditor() {
         {(user?.role === 'admin' || user?.role === 'manager') && (
           <div className="card p-6">
             <label className="block text-sm font-medium text-text-secondary mb-1.5">可见范围</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {[
                 { v: 'public', l: '所有人可见' },
                 { v: 'manager_only', l: '仅主理人可见' },
+                { v: 'specified', l: '指定人员可见' },
               ].map((opt) => (
                 <button key={opt.v} type="button" onClick={() => setVisibility(opt.v)}
                   className={`px-3 py-1.5 rounded-tag text-sm border-2 transition-colors ${
@@ -259,6 +299,28 @@ export function AnnouncementEditor() {
                 >{opt.l}</button>
               ))}
             </div>
+            {visibility === 'specified' && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-text-secondary">已选择 {targetUserIds.length} 人</span>
+                  <button type="button" onClick={() => setShowUserSelector(true)}
+                    className="text-xs text-accent hover:underline">选择人员</button>
+                </div>
+                {targetUserIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {users.filter((u: any) => targetUserIds.includes(u.id)).map((u: any) => (
+                      <span key={u.id} className="inline-flex items-center gap-1 px-2 py-1 bg-bg-secondary rounded-tag text-xs border border-border">
+                        {u.name}
+                        <button type="button" onClick={() => setTargetUserIds((prev) => prev.filter((id) => id !== u.id))}
+                          className="text-text-tertiary hover:text-danger transition-colors">
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -431,6 +493,7 @@ export function AnnouncementEditor() {
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         onChange={handleFileChange}
         className="hidden"
       />
@@ -441,6 +504,68 @@ export function AnnouncementEditor() {
         onChange={handleAttachmentChange}
         className="hidden"
       />
+
+      {/* User Selector Modal */}
+      {showUserSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowUserSelector(false)}>
+          <div className="bg-bg-primary rounded-card p-6 w-full max-w-md max-h-[80vh] flex flex-col shadow-xl border border-border"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-text-primary">选择可见人员</h3>
+              <button type="button" onClick={() => setShowUserSelector(false)}
+                className="p-1 text-text-tertiary hover:text-text-primary transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="搜索姓名或用户名..."
+              className="w-full px-3 py-2 bg-bg-secondary border border-border rounded-btn text-sm text-text-primary placeholder:text-text-tertiary outline-none focus:border-accent mb-3"
+            />
+            <div className="flex-1 overflow-auto space-y-1 min-h-[200px]">
+              {users
+                .filter((u: any) =>
+                  (u.name || '').toLowerCase().includes(userSearch.toLowerCase()) ||
+                  (u.username || '').toLowerCase().includes(userSearch.toLowerCase())
+                )
+                .map((u: any) => (
+                  <label key={u.id} className="flex items-center gap-3 p-2.5 hover:bg-bg-secondary rounded-btn cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={targetUserIds.includes(u.id)}
+                      onChange={() => {
+                        setTargetUserIds((prev) =>
+                          prev.includes(u.id) ? prev.filter((id) => id !== u.id) : [...prev, u.id]
+                        );
+                      }}
+                      className="w-4 h-4 accent-accent"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-text-primary truncate">{u.name}</div>
+                      <div className="text-xs text-text-tertiary truncate">{u.department || u.username}</div>
+                    </div>
+                  </label>
+                ))}
+              {users.length === 0 && (
+                <div className="text-center py-8 text-text-tertiary text-sm">加载中...</div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-4 pt-3 border-t border-border">
+              <button type="button" onClick={() => setShowUserSelector(false)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
+                取消
+              </button>
+              <button type="button" onClick={() => setShowUserSelector(false)}
+                className="px-5 py-2 bg-accent text-white rounded-btn text-sm font-medium hover:bg-accent-hover transition-colors">
+                确定 ({targetUserIds.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

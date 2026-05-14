@@ -4,9 +4,6 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export const api = axios.create({
   baseURL: API_BASE,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 api.interceptors.request.use((config) => {
@@ -14,9 +11,9 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  // Let browser set multipart boundary for FormData uploads
-  if (config.data instanceof FormData) {
-    delete config.headers['Content-Type'];
+  // Set JSON content-type for non-FormData requests; let browser handle multipart boundary for FormData
+  if (config.data && !(config.data instanceof FormData)) {
+    config.headers.set('Content-Type', 'application/json');
   }
   return config;
 });

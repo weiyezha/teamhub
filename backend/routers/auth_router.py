@@ -18,7 +18,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register")
-def register(req: RegisterReq, db: Session = Depends(get_db)):
+def register(req: RegisterReq, request: Request, db: Session = Depends(get_db)):
+    from rate_limit import check_ip_rate_limit, record_ip_request
+    client_ip = request.client.host if request.client else "unknown"
+    # IP rate limiting: max 5 registrations per hour
+    allowed, msg = check_ip_rate_limit(client_ip, "register", max_requests=5, window_minutes=60, db=db)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=msg)
+
     open_reg = get_setting(db, "open_registration", True)
     if not open_reg:
         raise HTTPException(status_code=403, detail="Registration is currently closed")
@@ -40,6 +47,7 @@ def register(req: RegisterReq, db: Session = Depends(get_db)):
         db.rollback()
         raise
     db.refresh(user)
+    record_ip_request(client_ip, "register", db=db)
     return {"message": "注册成功，等待管理员审批", "username": username}
 
 
@@ -75,7 +83,15 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
 
 
 @router.post("/forgot-password")
-def forgot_password(req: ForgotPasswordReq, db: Session = Depends(get_db)):
+def forgot_password(req: ForgotPasswordReq, request: Request, db: Session = Depends(get_db)):
+    from rate_limit import check_ip_rate_limit, record_ip_request
+    client_ip = request.client.host if request.client else "unknown"
+    # IP rate limiting: max 3 forgot-password requests per hour
+    allowed, msg = check_ip_rate_limit(client_ip, "forgot_password", max_requests=3, window_minutes=60, db=db)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=msg)
+    record_ip_request(client_ip, "forgot_password", db=db)
+
     user = db.query(User).filter(
         (User.username == req.username) | (User.name == req.username)
     ).first()
@@ -83,7 +99,9 @@ def forgot_password(req: ForgotPasswordReq, db: Session = Depends(get_db)):
     if not user or not user.phone or user.phone != req.phone.strip():
         return {"message": "If the account exists and phone matches, a reset token has been sent."}
     token = create_reset_token(user.id)
-    return {"token": token}
+    # Token should be sent via SMS/email, NOT returned in API response
+    # TODO: integrate SMS gateway to send token to user.phone
+    return {"message": "If the account exists and phone matches, a reset token has been sent."}
 
 
 @router.post("/reset-password")

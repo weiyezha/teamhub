@@ -68,14 +68,21 @@ function Layout({ children }: { children: React.ReactNode }) {
   const [watermarkOpacity, setWatermarkOpacity] = useState(0.08);
 
   useEffect(() => {
-    import('./api').then(({ api }) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setWatermarkOpacity(0.08);
+      return;
+    }
+    import('./lib/api').then(({ default: api }) => {
       api.get('/api/settings').then((res: any) => {
         if (res.data && typeof res.data.watermark_opacity === 'number') {
           setWatermarkOpacity(res.data.watermark_opacity);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        setWatermarkOpacity(0.08);
+      });
     });
-  }, []);
+  }, [user?.id]);
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex relative">

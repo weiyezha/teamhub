@@ -26,9 +26,16 @@ router = APIRouter(prefix="/api/announcements", tags=["announcements"])
 
 # --- Helpers ---
 def _check_announcement_visibility(a: Announcement, current_user: User):
-    """Block non-admin/manager users from accessing manager_only announcements."""
-    if a.visibility == "manager_only" and current_user.role not in ("admin", "manager"):
+    """Block non-admin/manager users from accessing manager_only or specified announcements
+    where they are not in the target list. Admin/manager can see all."""
+    if current_user.role in ("admin", "manager"):
+        return
+    if a.visibility == "manager_only":
         raise HTTPException(status_code=403, detail="No permission")
+    if a.visibility == "specified":
+        target_ids = a.target_user_ids or []
+        if current_user.id not in target_ids:
+            raise HTTPException(status_code=403, detail="No permission")
 
 
 def _smart_sort_score(a: Announcement, current_user: User, db: Session) -> float:
@@ -84,24 +91,29 @@ def list_announcements(
         )
         q = q.filter(Announcement.id.notin_(read_ids))
 
-    # Visibility filter: non-managers only see public announcements
+    # Visibility base filter: non-managers can't see manager_only
     if current_user.role not in ("admin", "manager"):
-        q = q.filter(Announcement.visibility == "public")
+        q = q.filter(Announcement.visibility != "manager_only")
 
+    # Get all matching items for Python-level filtering of specified visibility
+    all_items = q.all()
+
+    # Post-filter: non-managers only see specified announcements targeted at them
+    if current_user.role not in ("admin", "manager"):
+        all_items = [a for a in all_items if a.visibility != "specified" or current_user.id in (a.target_user_ids or [])]
+
+    # Sort
     if sort == "smart":
-        all_items = q.all()
         scored = [(a, _smart_sort_score(a, current_user, db)) for a in all_items]
         scored.sort(key=lambda x: x[1], reverse=True)
-        total = len(scored)
-        items = [a for a, _ in scored[(page - 1) * limit : page * limit]]
+        all_items = [a for a, _ in scored]
     elif sort == "views":
-        q = q.order_by(desc(Announcement.view_count))
-        total = q.count()
-        items = q.offset((page - 1) * limit).limit(limit).all()
+        all_items.sort(key=lambda a: a.view_count, reverse=True)
     else:
-        q = q.order_by(desc(Announcement.is_pinned), desc(Announcement.created_at))
-        total = q.count()
-        items = q.offset((page - 1) * limit).limit(limit).all()
+        all_items.sort(key=lambda a: (not a.is_pinned, a.created_at), reverse=True)
+
+    total = len(all_items)
+    items = all_items[(page - 1) * limit : page * limit]
 
     results = [_build_announcement_out(a, db, current_user.id) for a in items]
     return {"total": total, "page": page, "items": results}
@@ -158,6 +170,7 @@ def create_announcement(
     a = Announcement(
         title=req.title, content=safe_content, content_json=req.content_json,
         category=req.category, level=req.level, visibility=req.visibility,
+        target_user_ids=req.target_user_ids if req.visibility == "specified" else [],
         is_pinned=req.is_pinned, approval_status=approval_status, author_id=current_user.id,
         images=req.images, attachments=req.attachments, expires_at=req.expires_at,
         summary=_generate_summary(safe_content),
@@ -224,6 +237,9 @@ def update_announcement(
         ))
     for field, value in req.model_dump(exclude_unset=True).items():
         setattr(a, field, value)
+    # Ensure target_user_ids is cleared when switching away from specified
+    if req.visibility is not None and req.visibility != "specified":
+        a.target_user_ids = []
     a.updated_at = utc_now()
     if req.content is not None or req.title is not None:
         a.summary = _generate_summary(a.content)
@@ -455,10 +471,12 @@ def remind_unread(
 # --- Push notification (imported by create_announcement) ---
 def _notify_new_announcement(announcement: Announcement, db: Session):
     from database import Notification, PushSubscription
-    # Create in-app notifications for users who can see this announcement
+    # Build base query for active users
     active_users = db.query(User).filter(User.is_active == True)
     if announcement.visibility == "manager_only":
         active_users = active_users.filter(User.role.in_(("admin", "manager")))
+    elif announcement.visibility == "specified" and announcement.target_user_ids:
+        active_users = active_users.filter(User.id.in_(announcement.target_user_ids))
     active_users = active_users.all()
     for u in active_users:
         db.add(Notification(
@@ -471,6 +489,8 @@ def _notify_new_announcement(announcement: Announcement, db: Session):
     subs = db.query(PushSubscription).join(User, PushSubscription.user_id == User.id).filter(User.is_active == True)
     if announcement.visibility == "manager_only":
         subs = subs.filter(User.role.in_(("admin", "manager")))
+    elif announcement.visibility == "specified" and announcement.target_user_ids:
+        subs = subs.filter(User.id.in_(announcement.target_user_ids))
     subs = subs.all()
     for sub in subs:
         try:

@@ -40,6 +40,7 @@ class AnnouncementCreate(BaseModel):
     is_pinned: bool = False
     level: str = "normal"
     visibility: str = "public"
+    target_user_ids: list = []
     approval_status: str = ""
     images: list = []
     attachments: list = []
@@ -54,6 +55,7 @@ class AnnouncementUpdate(BaseModel):
     is_pinned: Optional[bool] = None
     level: Optional[str] = None
     visibility: Optional[str] = None
+    target_user_ids: Optional[list] = None
     status: Optional[str] = None
     approval_status: Optional[str] = None
     expires_at: Optional[datetime] = None
@@ -108,6 +110,7 @@ class AnnouncementOut(BaseModel):
     status: str
     level: str = "normal"
     visibility: str = "public"
+    target_user_ids: list = []
     approval_status: str
     author_id: Optional[int] = None
     author_name: str = ""
@@ -119,6 +122,7 @@ class AnnouncementOut(BaseModel):
     updated_at: datetime
     expires_at: Optional[datetime] = None
     read_count: int = 0
+    is_read: bool = False
     comment_count: int = 0
     reactions: ReactionSummary = ReactionSummary()
     summary: str = ""

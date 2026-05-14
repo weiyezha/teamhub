@@ -93,3 +93,56 @@ def record_success(ip: str, username: str, db: Session | None = None) -> None:
     if entry:
         db.delete(entry)
         db.commit()
+
+
+# Generic IP-based rate limiting for actions like register / forgot-password
+
+def check_ip_rate_limit(ip: str, action: str, max_requests: int, window_minutes: int, db: Session | None = None) -> tuple[bool, str]:
+    """Returns (allowed, message)."""
+    if db is None:
+        return True, ""
+
+    username = f"__action__{action}__"
+    entry = (
+        db.query(RateLimitEntry)
+        .filter(RateLimitEntry.ip == ip, RateLimitEntry.username == username)
+        .first()
+    )
+    if not entry:
+        return True, ""
+
+    now = _now()
+    first_failure_at = _ensure_aware(entry.first_failure_at)
+
+    # Reset window expired
+    if first_failure_at and (now - first_failure_at) > timedelta(minutes=window_minutes):
+        db.delete(entry)
+        db.commit()
+        return True, ""
+
+    if entry.failure_count >= max_requests:
+        retry_after = int((first_failure_at + timedelta(minutes=window_minutes) - now).total_seconds())
+        return False, f"Too many requests. Please try again in {max(1, retry_after // 60)} minute(s)."
+
+    return True, ""
+
+
+def record_ip_request(ip: str, action: str, db: Session | None = None) -> None:
+    if db is None:
+        return
+
+    username = f"__action__{action}__"
+    entry = (
+        db.query(RateLimitEntry)
+        .filter(RateLimitEntry.ip == ip, RateLimitEntry.username == username)
+        .first()
+    )
+
+    now = _now()
+    if entry:
+        entry.failure_count += 1
+    else:
+        entry = RateLimitEntry(ip=ip, username=username, failure_count=1, first_failure_at=now)
+        db.add(entry)
+
+    db.commit()

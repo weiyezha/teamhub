@@ -4,7 +4,7 @@ import {
   Megaphone, Pin, Eye, MessageSquare, Search,
   ThumbsUp, CheckCircle,
   PinOff, Archive, Trash2, FolderOpen, X,
-  Flame,
+  Flame, LayoutGrid, List, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import api from '../lib/api';
 import { showToast } from '../hooks/useToast';
@@ -12,9 +12,7 @@ import { useConfirm } from '../hooks/useConfirm';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAuth } from '../hooks/useAuth';
 import { useCategories, getCategoryColor } from '../hooks/useCategories';
-
-
-
+import { AnnouncementCompactList } from '../components/AnnouncementCompactList';
 
 const statusTabs = [
   { key: 'active', label: '进行中' },
@@ -27,6 +25,8 @@ const levelConfig: Record<string, { bar: string; badge: string; label: string; i
   normal:   { bar: 'bg-blue-500',  badge: 'bg-blue-500 text-white',  label: '普通', icon: '' },
 };
 
+const PAGE_SIZE = 50;
+
 export function Announcements() {
   const { requestConfirm: confirm, cancel, state: confirmState } = useConfirm();
   const { user } = useAuth();
@@ -38,6 +38,7 @@ export function Announcements() {
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchAction, setBatchAction] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('list');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { categories: apiCategories } = useCategories();
   const categories = ['全部', ...apiCategories];
@@ -71,7 +72,7 @@ export function Announcements() {
     if (activeSort) params.set('sort', activeSort);
     if (unreadOnly) params.set('unread_only', '1');
     params.set('page', String(page));
-    params.set('limit', '20');
+    params.set('limit', String(PAGE_SIZE));
     try {
       const res = await api.get(`/api/announcements?${params}`);
       setItems(res.data.items);
@@ -150,6 +151,78 @@ export function Announcements() {
     setPage(1);
   };
 
+  // Featured items for carousel (top 5 recent)
+  const featuredItems = items.slice(0, 5);
+
+  // Inline carousel component to avoid HMR/cache issues with external file
+  function InlineCarousel({ items: carouselItems }: { items: typeof featuredItems }) {
+    const [idx, setIdx] = useState(0);
+    const [hover, setHover] = useState(false);
+    const total = carouselItems.length;
+    const goNext = () => setIdx((i) => (i + 1) % total);
+    const goPrev = () => setIdx((i) => (i - 1 + total) % total);
+
+    useEffect(() => {
+      if (hover || total <= 1) return;
+      const t = setInterval(goNext, 5000);
+      return () => clearInterval(t);
+    }, [hover, total, idx]);
+
+    if (total === 0) return null;
+    const cur = carouselItems[idx];
+    const hasImg = cur.images && cur.images.length > 0;
+    const lvlColor = cur.level === 'urgent' ? '#D93025' : cur.level === 'important' ? '#E37300' : '#1A73E8';
+
+    return (
+      <div
+        className="relative w-full rounded-card overflow-hidden group mb-6"
+        style={{ height: 280 }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+      >
+        {hasImg ? (
+          <>
+            <img src={cur.images[0]} alt="" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700" style={{ transform: `scale(${hover ? 1.05 : 1})` }} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          </>
+        ) : (
+          <div className="absolute inset-0" style={{ backgroundColor: lvlColor }} />
+        )}
+        <div className="absolute inset-0 flex flex-col justify-end p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] px-2 py-0.5 rounded-tag font-medium text-white bg-black/40">{cur.category}</span>
+            {cur.level !== 'normal' && (
+              <span className="text-[11px] px-2 py-0.5 rounded-tag font-medium text-white" style={{ backgroundColor: lvlColor }}>
+                {cur.level === 'urgent' ? '紧急' : '重要'}
+              </span>
+            )}
+          </div>
+          <Link to={`/announcements/${cur.id}`}>
+            <h3 className="text-xl font-bold text-white mb-1 line-clamp-2 group-hover:underline">{cur.title}</h3>
+          </Link>
+          <p className="text-sm text-white/70 line-clamp-1">{cur.author_name} · {new Date(cur.created_at).toLocaleDateString()}</p>
+        </div>
+        {total > 1 && (
+          <>
+            <button onClick={(e) => { e.stopPropagation(); goPrev(); }} className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/50">
+              <ChevronLeft size={18} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); goNext(); }} className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/50">
+              <ChevronRight size={18} />
+            </button>
+          </>
+        )}
+        {total > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+            {carouselItems.map((_, i) => (
+              <button key={i} onClick={() => setIdx(i)} className={`rounded-full transition-all ${i === idx ? 'w-5 h-2 bg-white' : 'w-2 h-2 bg-white/50 hover:bg-white/70'}`} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -160,15 +233,43 @@ export function Announcements() {
             共 {total} 条公告
           </p>
         </div>
-        {user?.allowed_modules?.announcements?.includes('publish') && (
-          <Link
-            to="/announcements/new"
-            className="px-4 py-2 bg-accent text-white rounded-btn text-sm font-medium hover:bg-accent-hover transition-colors"
-          >
-            + 发布公告
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center bg-bg-secondary border border-border rounded-btn overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
+                viewMode === 'list' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'
+              }`}
+              title="列表视图"
+            >
+              <List size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
+                viewMode === 'card' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'
+              }`}
+              title="卡片视图"
+            >
+              <LayoutGrid size={16} />
+            </button>
+          </div>
+          {user?.allowed_modules?.announcements?.includes('publish') && (
+            <Link
+              to="/announcements/new"
+              className="px-4 py-2 bg-accent text-white rounded-btn text-sm font-medium hover:bg-accent-hover transition-colors"
+            >
+              + 发布公告
+            </Link>
+          )}
+        </div>
       </div>
+
+      {/* Featured Carousel */}
+      {activeStatus === 'active' && !search && !unreadOnly && page === 1 && (
+        <InlineCarousel items={featuredItems} />
+      )}
 
       {/* Status Tabs */}
       <div className="flex items-center gap-2">
@@ -258,7 +359,7 @@ export function Announcements() {
         ))}
       </div>
 
-      {/* Announcement Grid */}
+      {/* Content: List or Card */}
       {loading ? (
         <div className="text-center py-12 text-text-secondary">加载中...</div>
       ) : items.length === 0 ? (
@@ -266,6 +367,14 @@ export function Announcements() {
           <Megaphone size={48} className="text-text-tertiary mx-auto mb-3" />
           <p className="text-text-secondary">暂无公告</p>
         </div>
+      ) : viewMode === 'list' ? (
+        <AnnouncementCompactList
+          items={items}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelection}
+          showCheckbox={selectedIds.size > 0}
+          userRole={user?.role}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {items.map((a) => {
@@ -283,7 +392,7 @@ export function Announcements() {
                 {/* Level color bar */}
                 <div className={`h-1 w-full ${lvl.bar}`} />
 
-                {/* Cover area - always present for consistent card height */}
+                {/* Cover area */}
                 <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-bg-secondary to-bg-tertiary">
                   {hasCover ? (
                     <>
@@ -301,7 +410,6 @@ export function Announcements() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                     </>
                   ) : (
-                    /* AI Summary cover for announcements without images */
                     <div className="absolute inset-0 pt-8 pb-3 px-4 flex flex-col">
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <span className="text-[9px] px-1.5 py-0.5 rounded-tag font-medium bg-accent/10 text-accent border border-accent/20">
@@ -334,7 +442,6 @@ export function Announcements() {
                 </div>
 
                 <div className="p-4 flex flex-col gap-2.5">
-                  {/* Header row */}
                   <div className="flex items-center gap-2">
                     {a.level !== 'normal' && (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-tag font-medium flex items-center gap-0.5 ${lvl.badge}`}>
@@ -352,21 +459,23 @@ export function Announcements() {
                         仅主理人
                       </span>
                     )}
+                    {a.visibility === 'specified' && (user?.role === 'admin' || user?.role === 'manager') && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-tag font-medium bg-amber-600 text-white">
+                        指定人员
+                      </span>
+                    )}
                   </div>
 
-                  {/* Title */}
                   <Link to={`/announcements/${a.id}`} className="block">
                     <h3 className="text-sm font-semibold text-text-primary line-clamp-2 group-hover:text-accent transition-colors leading-snug">
                       {a.title}
                     </h3>
                   </Link>
 
-                  {/* Summary */}
                   <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">
                     {a.summary || a.content?.replace(/<[^>]*>/g, '').slice(0, 100)}
                   </p>
 
-                  {/* Meta */}
                   <div className="flex items-center justify-between text-[11px] text-text-tertiary mt-auto pt-2 border-t border-border-subtle">
                     <div className="flex items-center gap-2.5">
                       <span className="truncate max-w-[80px]">{a.author_name}</span>
@@ -401,9 +510,9 @@ export function Announcements() {
       )}
 
       {/* Pagination */}
-      {total > 20 && (
+      {total > PAGE_SIZE && (
         <div className="flex items-center justify-center gap-2 pt-4">
-          {Array.from({ length: Math.ceil(total / 20) }, (_, i) => i + 1).map((p) => (
+          {Array.from({ length: Math.ceil(total / PAGE_SIZE) }, (_, i) => i + 1).map((p) => (
             <button
               key={p}
               onClick={() => setPage(p)}
@@ -514,5 +623,3 @@ function BatchButton({
     </button>
   );
 }
-
-

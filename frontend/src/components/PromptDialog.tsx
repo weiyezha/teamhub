@@ -32,13 +32,10 @@ export function PromptDialog({
     }
   }, [open, defaultValue]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') onConfirm(value);
-      if (e.key === 'Escape') onCancel();
-    },
-    [value, onConfirm, onCancel]
-  );
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') onConfirm(value);
+    if (e.key === 'Escape') onCancel();
+  };
 
   if (!open) return null;
 

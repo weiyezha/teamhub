@@ -32,7 +32,15 @@ export function WelcomeModal() {
     const dismissed = localStorage.getItem('welcome_dismissed');
     if (dismissed) return;
 
-    // Fetch custom welcome content
+    const token = localStorage.getItem('token');
+    if (!token) {
+      // Not logged in: show default welcome without fetching settings
+      setVisible(true);
+      requestAnimationFrame(() => setFadeIn(true));
+      return;
+    }
+
+    // Fetch custom welcome content (requires authentication)
     api.get('/api/settings').then((r: any) => {
       let welcome = DEFAULT_WELCOME;
       if (r.data.welcome_message && typeof r.data.welcome_message === 'object') {
